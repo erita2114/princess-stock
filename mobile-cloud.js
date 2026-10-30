@@ -9,7 +9,8 @@
   const codes = ['0050','00646'];
   let db = null, owner = null, rev = null, lastSaved = null, queue = Promise.resolve(), busy = false;
   let authListener = null, loggedUserId = null, marketTimer = null;
-  const cloud = {ready:false, confirmedState:null, save: save};
+  let familyReadOnly = false;
+  const cloud = {ready:false, viewOnly:false, confirmedState:null, save: save};
   window.prCloud = cloud;
   const msg = text => { $c('cloudGateMessage').textContent = text || ''; };
   const topStatus = text => { $c('cloudSyncStatus').textContent = text; };
@@ -62,11 +63,13 @@
     return x;
   }
   async function save(next) {
+    if (familyReadOnly) throw Error('家庭共享為唯讀模式，只有帳本主人能修改交易或設定。');
     if (!cloud.ready || !owner) throw Error('私人帳本尚未登入或載入。');
     const payload = sanitized(next);
     const stateAudit=inspectState(payload);
     if (stateAudit.errors.length) throw Error('帳務驗證未通過：'+stateAudit.errors.slice(0,3).join('；'));
     const pending=queue.then(async () => {
+      if (familyReadOnly) throw Error('唯讀帳號不能修改交易。');
       if (!cloud.ready || !owner) throw Error('登入狀態已變更，未執行寫入。');
       busy = true;
       document.body.classList.add('cloud-saving');
@@ -112,7 +115,7 @@
     if(id===loggedUserId && (cloud.ready || (!id&&$c('cloudLoginView').hidden===false))) return;
     loggedUserId=id;
     if (!id) {
-      cloud.ready=false;owner=null;rev=null;st=defaultState();
+      cloud.ready=false;owner=null;rev=null;st=defaultState();familyReadOnly=false;cloud.viewOnly=false;
       clearMarket();
       if(marketTimer){clearInterval(marketTimer);marketTimer=null}
       showGate('cloudLoginView');
@@ -120,8 +123,14 @@
       $c('cloudUserLabel').textContent='';
       return;
     }
-    owner=id; cloud.ready=false;
+    owner=id; cloud.ready=false; familyReadOnly=false; cloud.viewOnly=false;
     $c('cloudUserLabel').textContent=session.user.email||'已登入';
+    // Shared portfolio is selected first, even if this device once made an empty ledger.
+    // The server authorizes this by verified email, never by public GitHub configuration.
+    const {data:sharedOwner,error:shareError}=await db.rpc('pr_my_shared_portfolio');
+    if (!shareError && sharedOwner && sharedOwner!==id) {
+      owner=sharedOwner;familyReadOnly=true;cloud.viewOnly=true;
+    }
     await loadRemote();
   }
   async function loadRemote() {
@@ -130,7 +139,7 @@
     showGate('cloudBusyView'); msg('讀取私人帳本…');
     const {data,error}=await db.from('portfolio_states').select('payload,revision').eq('user_id',owner).maybeSingle();
     if(error){showGate('cloudBusyView');msg('雲端讀取失敗：'+error.message+'。請先檢查是否執行 SQL，勿在此狀態新增資料。');return}
-    if(!data){rev=null;cloud.ready=false;showGate('cloudFirstView');msg('雲端沒有帳本。請選擇從備份還原或建立空白帳本。');return}
+    if(!data){rev=null;cloud.ready=false;showGate('cloudFirstView');msg('尚無可讀取的帳本。如果是家人要一起觀看，請先請帳本主人在「設定與備份 → 家庭共享」加入你的登入 Email，之後重新整理。切勿替女兒建立第二份空白帳本。');return}
     const x=data.payload;
     const audit=inspectState(x);
     if(audit.errors.length){showGate('cloudBusyView');msg('雲端帳本驗證不通過：'+audit.errors.slice(0,3).join('；')+'。沒有覆蓋資料。');return}
@@ -142,12 +151,14 @@
     $c('cloudGate').hidden=true;
     refresh();
     window.prLoadNotify?.();
-    saveStatus('☁️ 雲端同步完成 · 版本 '+rev);
+    updateFamilyAccessUi();
+    saveStatus(familyReadOnly?'👀 家庭共享唯讀 · 版本 '+rev:'☁️ 雲端同步完成 · 版本 '+rev);
     if(marketTimer)clearInterval(marketTimer);
     marketTimer=setInterval(()=>{if(!document.hidden)readMarket().catch(console.warn)},30000);
     await readMarket();
   }
   async function initFirst(x) {
+    if(familyReadOnly)throw Error('家庭共享帳號無法建立或修改帳本。');
     if(!owner||cloud.ready) return;
     const audit=inspectState(x);if(audit.errors.length)throw Error('備份未通過核對：'+audit.errors.slice(0,4).join('；'));
     showGate('cloudBusyView');msg('第一次建立雲端帳本…');
@@ -216,6 +227,71 @@
     if(usable){const current=$c('autoSymbol').value;if(window.daughterBarsCache?.[current]?.cloudAuthorized)window.prSelectCached(current);}
     renderHome();
   }
+  // Family read-only sharing.  A verified Supabase email is required for each viewer.
+  // Security is enforced by SQL row-level policy; browser-only restrictions are just UX.
+  function updateFamilyAccessUi(){
+    const existing=$c('familySharingCard');
+    if(existing) existing.remove();
+    const root=$c('page-settings');
+    if(!root) return;
+    const card=document.createElement('div');
+    card.id='familySharingCard';card.className='card';card.style.marginTop='16px';
+    const h=document.createElement('h3');h.textContent='♡ 家庭共享｜同一份小公主帳本';card.append(h);
+    const p=document.createElement('p');p.className='help';
+    p.textContent=familyReadOnly?'你目前以家庭成員身分唯讀查看；所有成交、設定及預算只能由帳本主人修改。':'將家人的登入 Email 加入唯讀名單。家人登入自己的信箱，就能看同一份持股、買點雷達和 22 年預估，但無法修改交易。';card.append(p);
+    if(!familyReadOnly){
+      const label=document.createElement('label');label.className='field';label.textContent='家人的登入 Email';
+      const input=document.createElement('input');input.type='email';input.placeholder='例如配偶的電子郵件';input.autocomplete='off';label.append(input);card.append(label);
+      const bar=document.createElement('div');bar.className='actions';bar.style.marginTop='10px';
+      const add=document.createElement('button');add.className='btn';add.type='button';add.textContent='授權唯讀查看';
+      const remove=document.createElement('button');remove.className='btn secondary';remove.type='button';remove.textContent='撤銷這個 Email';
+      bar.append(add,remove);card.append(bar);
+      const result=document.createElement('p');result.className='help';card.append(result);
+      const call=async(action)=>{
+        const email=input.value.trim();if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){result.textContent='請輸入有效的 Email。';return}
+        if(action==='remove'&&!confirm('確定要取消 '+email+' 的家庭查看權限？'))return;
+        add.disabled=remove.disabled=true;
+        try{
+          const {error}=await db.rpc(action==='add'?'pr_add_family_viewer':'pr_remove_family_viewer',{p_email:email});
+          if(error)throw error;
+          result.textContent=action==='add'?'已授權 '+email+' 唯讀查看。請對方用自己的 Email 登入本網站，不需要設定 Project URL。':'已取消 '+email+' 的查看授權。';
+          await showFamilyList(card);
+        }catch(e){result.textContent='操作失敗：'+e.message+'。請確認已在 Supabase 執行 002_family_readonly.sql。'}
+        finally{add.disabled=remove.disabled=false}
+      };
+      add.onclick=()=>call('add');remove.onclick=()=>call('remove');
+      showFamilyList(card).catch(console.warn);
+    }
+    root.append(card);
+    document.body.classList.toggle('family-read-only',familyReadOnly);
+    let badge=$c('familyReaderBadge');
+    if(badge)badge.remove();
+    if(familyReadOnly){
+      badge=document.createElement('div');badge.id='familyReaderBadge';badge.className='notice ok';
+      badge.style.margin='12px 0';badge.textContent='👀 家庭唯讀模式：可以查看同一份投資帳本，但不能新增、編輯、刪除交易或更改設定。';
+      $c('cloudSyncBar').insertAdjacentElement('afterend',badge);
+    }
+  }
+  async function showFamilyList(card){
+    if(familyReadOnly)return;
+    const {data,error}=await db.rpc('pr_list_family_viewers');
+    let out=card.querySelector('.family-viewer-list');
+    if(!out){out=document.createElement('div');out.className='help family-viewer-list';card.append(out)}
+    if(error){out.textContent='尚未啟用家庭共享資料庫設定。';return}
+    const emails=(data||[]).map(v=>typeof v==='string'?v:v.viewer_email).filter(Boolean);
+    out.textContent='目前授權：'+(emails.length?emails.join('、'):'尚未授權家人');
+  }
+  // The database rejects writes to another person's portfolio regardless of browser behavior.
+  // Stop incidental clicks on edit controls for better read-only usability.
+  document.addEventListener('click',e=>{
+    if(!familyReadOnly)return;
+    const b=e.target.closest('button');if(!b)return;
+    if(b.matches('[data-edit],[data-del],[data-snapdel]')||
+       ((b.closest('#page-trades,#page-settings,#page-notify'))&&b.classList.contains('btn'))){
+      e.preventDefault();e.stopImmediatePropagation();
+      alert('這是家庭唯讀帳號。請由帳本主人在自己的手機新增或修改資料。');
+    }
+  },true);
   // Mobile-specific event handlers. Every ledger change remains controlled by V3.6's validation.
   $c('cloudSetupBtn').onclick=()=>{
     try {
