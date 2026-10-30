@@ -1,0 +1,42 @@
+/* Keep the original V3.6 artwork, typography, cards, and all seven sections. */
+:root{--m2-ink:#453057;--m2-purple:#74539b}
+#cloudGate[hidden],#cloudConfigView[hidden],#cloudLoginView[hidden],#cloudFirstView[hidden],#cloudBusyView[hidden]{display:none!important}
+#cloudGate{position:fixed;inset:0;background:linear-gradient(155deg,#f3dff9 0%,#fdf7fd 45%,#ebe3fc 100%);z-index:1000;display:grid;place-items:center;padding:24px 13px;overflow:auto}
+.cloud-gate-card{width:100%;max-width:495px;background:white;box-shadow:0 22px 80px #69487835;border:1px solid #dfc5e9;border-radius:26px;padding:25px;max-height:94vh;overflow:auto;color:#453057}
+.cloud-gate-top{display:flex;align-items:center;gap:14px;margin-bottom:15px}.cloud-sparkle{background:#f3e6fa;border-radius:18px;padding:15px;color:#8450ab;font-size:26px}.cloud-gate-top h2{margin:0 0 5px}.cloud-gate-top p{font-size:12px;color:#8e7898;margin:0}
+.cloud-gate-card h3{font-size:17px;margin:21px 0 10px}.cloud-gate-card label{display:block;font-size:13px;color:#685472;margin:12px 0}.cloud-gate-card input[type="text"],.cloud-gate-card input[type="url"],.cloud-gate-card input[type="email"]{width:100%;margin-top:5px;border:1px solid #e3cfe6;border-radius:12px;min-height:45px;padding:10px 13px;color:#432952;font:inherit}
+.cloud-gate-card button{margin-top:9px}.cloud-full{width:100%}#cloudGateMessage{font-size:13px;color:#a74865;line-height:1.55;margin-top:10px}.cloud-file-label{border:1px dashed #9b70b7;border-radius:12px;padding:13px;background:#fcf5ff}.cloud-file-label input{display:block;max-width:100%;margin-top:9px}
+#cloudSyncBar{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:8px;padding:10px 12px;border:1px solid #e6d6ea;background:#fffafd;border-radius:15px;margin-bottom:13px;font-size:12px}
+.cloud-sync-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.cloud-sync-actions #cloudUserLabel{color:#89739a;max-width:170px;white-space:nowrap;text-overflow:ellipsis;overflow:hidden}
+.cloud-saving .panel button,.cloud-saving .panel input,.cloud-saving .panel select{pointer-events:none;opacity:.72}
+#cloudMarketPanel{margin:15px 0;padding:17px;background:#fffaff;border:1.5px solid #ddc4ea}
+.cloud-quote-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin:12px 0}
+.cloud-quote-card{background:#fff;border:1px solid #ecddf0;border-radius:14px;padding:14px;min-width:0}.cloud-quote-card strong{display:block;margin-bottom:4px}
+.cloud-price{font-size:22px;font-weight:900;color:#66418d;margin:5px 0}.cloud-tag{display:inline-block;font-size:11px;border-radius:12px;background:#f4e8f6;color:#845a92;padding:4px 8px;margin:8px 0}.cloud-signal{font-weight:800;font-size:12px;margin-top:5px;color:#7952a2}
+/* Original gateway was for a Windows localhost daemon, not a cloud service. Keep the history import/testing widgets; hide misleading localhost controls. */
+#gatewayUrl,#gatewayFetch,#gatewayStop,#autoFrequency,#gatewayUrl~.help{display:none!important}
+@media(max-width:950px){
+ body{padding-bottom:calc(78px + env(safe-area-inset-bottom))}
+ .sidebar{position:fixed;left:0;right:0;bottom:0;top:auto;padding:5px 6px calc(5px + env(safe-area-inset-bottom));z-index:100;background:#281a3b;box-shadow:0 -5px 35px #2c164544;border-radius:17px 17px 0 0}
+ .sidebar .brand,.sidebar .side-note{display:none}
+ .nav{display:flex;gap:2px;overflow-x:auto;scroll-snap-type:x proximity;scrollbar-width:none;margin:0;padding:3px 0;overscroll-behavior-x:contain}
+ .nav::-webkit-scrollbar{display:none}
+ .nav button{flex:0 0 auto;min-width:78px;white-space:nowrap;text-align:center;padding:11px 8px;font-size:12px;line-height:1.35;scroll-snap-align:start;border-radius:11px}
+ .main{padding:13px 12px}
+ .topbar{margin-bottom:9px}
+ .cloud-quote-grid{grid-template-columns:1fr 1fr}
+}
+@media(max-width:540px){
+ .cloud-quote-grid{grid-template-columns:1fr}
+ .hero{padding:15px}
+ .hero .hero-blurb{max-width:65%}
+ .hero img{width:112px;height:112px;max-width:35%}
+ .hero h1{font-size:17px}
+ .cloud-sync-actions #cloudUserLabel{display:none}
+ #cloudSyncBar{font-size:11px}
+ .cloud-sync-actions .btn{font-size:10px;padding:6px 8px}
+ .card{border-radius:16px}
+ .tablewrap{margin-left:-5px;margin-right:-5px}
+}
+
+.m2-hidden-legacy{display:none!important}
