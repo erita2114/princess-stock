@@ -17,11 +17,33 @@
     $c('cloudGate').hidden = false;
     for (const id of ['cloudConfigView','cloudLoginView','cloudFirstView','cloudBusyView']) $c(id).hidden = id !== key;
   };
-  const config = () => { try {return JSON.parse(localStorage.getItem(CFG)||'null')}catch{return null} };
+  // Website-wide public configuration is loaded from cloud-config.json.
+  // Only the public Supabase URL and publishable key belong there; credentials never do.
+  let publishedConfig = null;
+  const localConfig = () => { try {return JSON.parse(localStorage.getItem(CFG)||'null')}catch{return null} };
+  const config = () => publishedConfig || localConfig();
   function publicConfigValid(url, key) {
     if (!/^https:\/\/[a-z0-9-]+\.supabase\.co\/?$/i.test(url)) throw Error('請輸入 Supabase 專案 URL。');
     if (typeof key !== 'string' || key.length < 22 || (/^sb_secret_/i.test(key)) || key.includes('service_role')) throw Error('僅能使用 publishable／anon 公開金鑰，不能輸入 secret/service_role。');
     if (!key.startsWith('sb_publishable_') && !key.startsWith('eyJ')) throw Error('公開金鑰格式不符合預期。');
+  }
+  async function loadPublishedConfig() {
+    let response;
+    try {
+      response = await fetch(new URL('cloud-config.json', location.href), {cache:'no-store'});
+    } catch (_) { return null; } // Offline: keep the per-browser fallback.
+    if (!response.ok) {
+      if (response.status === 404) return null;
+      throw Error('公開設定檔無法讀取（HTTP ' + response.status + '）');
+    }
+    const raw = await response.json();
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) throw Error('設定檔格式不正確');
+    const url = String(raw.projectUrl || raw.url || '').trim();
+    const key = String(raw.publishableKey || raw.key || '').trim();
+    if (!url && !key) return null; // Template is not configured yet.
+    if (url.includes('YOUR_') || key.includes('YOUR_')) return null;
+    publicConfigValid(url, key);
+    return {url:url.replace(/\/$/,''),key};
   }
   function cfgUI() {
     showGate('cloudConfigView');
@@ -70,9 +92,12 @@
     return pending;
   }
   async function bootWithConfig() {
+    try { publishedConfig = await loadPublishedConfig(); }
+    catch(e) { cfgUI(); msg('網站 cloud-config.json 設定有誤：'+e.message); return; }
     const c=config();
     if (!c) return cfgUI();
     try {
+      if (publishedConfig) $c('cloudChangeConfig').hidden = true;
       publicConfigValid(c.url,c.key);
       if (!window.supabase?.createClient) throw Error('Supabase 連線元件未載入，請檢查網路或廣告攔截設定。');
       db=window.supabase.createClient(c.url.replace(/\/$/,''),c.key,{auth:{autoRefreshToken:true,persistSession:true,detectSessionInUrl:true}});
@@ -198,7 +223,7 @@
       localStorage.setItem(CFG,JSON.stringify({url:url.replace(/\/$/,''),key}));location.reload();
     }catch(e){msg(e.message)}
   };
-  $c('cloudChangeConfig').onclick=()=>{if(confirm('更換公開雲端專案？此操作不會刪除既有雲端資料。')){localStorage.removeItem(CFG);location.reload()}};
+  $c('cloudChangeConfig').onclick=()=>{if(publishedConfig)return msg('此網站的雲端連線由 GitHub 的 cloud-config.json 統一管理。');if(confirm('更換公開雲端專案？此操作不會刪除既有雲端資料。')){localStorage.removeItem(CFG);location.reload()}};
   $c('cloudLoginBtn').onclick=async()=>{
     const email=$c('cloudEmail').value.trim();if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))return msg('請輸入有效的 Email');
     try{const {error}=await db.auth.signInWithOtp({email,options:{emailRedirectTo:location.origin+location.pathname}});if(error)throw error;msg('登入連結已寄出，請到你的 Email 信箱點選連結。')}
